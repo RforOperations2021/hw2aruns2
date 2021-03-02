@@ -6,52 +6,315 @@
 #
 #    http://shiny.rstudio.com/
 #
-
+# for (i in dev.list()[1]:dev.list()[length(dev.list())]) {
+#          dev.off()
+#      }
 library(shiny)
 library(shinydashboard)
 library(reshape2)
 library(dplyr)
 library(plotly)
 library(shinythemes)
+library(dashboardthemes)
 
 # Load and clean data ----------------------------------------------
 ev.sales <- read.csv("new ZEV sales.csv")
 ev.population <- read.csv("vehicle_population.csv")
-ev.chargers <- read.csv("evchargers.csv")
+
+#cleaning EV data
+ev.chargers <- read.csv("ev_chargers.csv")
+#only CA and EVs
+ev.chargers1 <- ev.chargers[ev.chargers$State == "CA" & 
+                                ev.chargers$Fuel.Type.Code == "ELEC"
+                            ,c("Fuel.Type.Code","City","EV.Level1.EVSE.Num",
+                               "EV.Level2.EVSE.Num","EV.DC.Fast.Count"  )]
+
+#groupby City
+ev <- ev.chargers1 %>% group_by(City)%>% 
+    summarise(count =n(),
+              Level_one = sum(EV.Level1.EVSE.Num, na.rm=TRUE),
+              Level_two = sum(EV.Level2.EVSE.Num, na.rm = TRUE),
+              DC_Fast = sum(EV.DC.Fast.Count, na.rm =TRUE)) %>% 
+    mutate(total = Level_one +Level_two +DC_Fast)
+ev <- ev[order(-ev$total),]
+
+## dataset2
+counties = unique(ev.sales$County)
+county_wise_sales <- ev.sales %>% group_by(Data.Year, County) %>% summarise( total_sales = sum(Number.of.Vehicles, na.rm = TRUE))
+county_wise_sales$Data.Year <- as.factor(county_wise_sales$Data.Year)
+## datset3
+fuel <- ev.population %>% group_by(Data.Year, Fuel.Type) %>% summarise(vehicles_population =  sum(Number.of.Vehicles,na.rm =TRUE))
+fuel$Data.Year <- as.factor(fuel$Data.Year)
+fuel_type <- unique(fuel$Fuel.Type)
+ggplot(data = fuel, aes(x = Data.Year, color = Fuel.Type))+
+    geom_line(aes(y = vehicles_population, group =1))+
+    theme_bw()+
+    theme(axis.text.x = element_text(angle = 60, hjust =1, vjust =1))+
+    xlab("City in CA") + ylab("Numbers of charging stations") + facet_wrap(.~Fuel.Type, scales = "free")
 
 # Avoid plotly issues ----------------------------------------------
 pdf(NULL)
 
-
 # Application header & title ----------------------------------------------
-header <- dashboardHeader(title = "Dashboard: Forecasting for Electric Vehicles in California",
+header <- dashboardHeader(title = "Electric Vehicles (CA)",
                           
                           # Drop down menu with hard coded values ------------------------------
                           dropdownMenu(type = "notifications",
-                                       notificationItem(text = "New Plot Added", 
+                                       notificationItem(text = "Forecasting done!", 
                                                         icon = icon("users"))
                           ),
                           dropdownMenu(type = "tasks", badgeStatus = "success",
                                        taskItem(value = 110, color = "green",
-                                                "Midichlorians")
+                                                "EV lists")
                           ),
                           dropdownMenu(type = "messages",
                                        messageItem(
                                            from = "Arun",
-                                           message = HTML("Get the EV swag on! <br> The World's running out of time."),
+                                           message = HTML("Let's put on our green SWAG!! <br> Go Green!."),
                                            icon = icon("exclamation-circle"))
                           )
 )
 
 # Dashboard Sidebar ----------------------------------------------
 sidebar <- dashboardSidebar(
+    
     sidebarMenu(
         id = "tabs",
         
         # Menu Items ----------------------------------------------
-        menuItem("Infrastructure", icon = icon("battery-half"), tabName = "Infra-Charging"),
-        menuItem("evsales", icon = icon("car-side"), tabName = "New EV sales", badgeLabel = "new", badgeColor = "green"),
-        menuItem("carsales", icon = icon("truck-monster"), tabName = "Vehicle Population", badgeLabel = "new", badgeColor = "green"),
+        menuItem("Total Vehicle population", icon = icon("truck"), tabName = "sale"),
+        br(),
+        selectInput("county",
+                    "Select County:",
+                    choices = counties,
+                    multiple = FALSE,
+                    #selectize = TRUE,
+                    selected = "Los Angeles"),
+        br(),
+        menuItem("Electric Vehicle Sales", icon = icon("car"), tabName = "newvehicle"),
         
-       
+        menuItem("Electric Vehicle Chargers", icon = icon("battery-half"), tabName = "EVchargers"),
+        menuItem("TableEVC", icon = icon("table"), tabName = "tableevc"), #badgeLabel = "new", badgeColor = "green"),
+        
+        
+        br(),
+        br(),
+        br(),
+        # Inputs: select variables to plot ----------------------------------------------
+        selectInput("chargeLevel",
+                    "Charger Level:",
+                    choices = c("Level_one", "Level_two", "DC_Fast", "total"),
+                    multiple = FALSE,
+                    #selectize = TRUE,
+                    selected = "total"),
+        #INputs: county selected
+        
+        
+    
+    #input: Fuel type
+        selectInput("fuel",
+                    "Select Fuel Type:",
+                    choices = fuel_type,
+        multiple = FALSE,
+        #selectize = TRUE,
+        selected = "Diesel"),
+        # top x Selection ----------------------------------------------
+        sliderInput("topSelect",
+                    "Select Top:",
+                    min = 5,
+                    max = 25,
+                    value = 5,
+                    step = 1)
+    )
 )
+
+
+# Dashboard body ----------------------------------------------
+body <- dashboardBody(shinyDashboardThemes(theme = "blue_gradient"),
+                      
+                      
+    # Input and Value Boxes ----------------------------------------------
+    fluidRow(
+        infoBoxOutput("EVcars"),
+        infoBoxOutput("Totalchargers"),
+        valueBoxOutput("Totalcars")
+    ),
+                      tabItems(
+                          
+                          # Plot page ----------------------------------------------
+                          tabItem("EVchargers",
+                                  
+                                 
+                                  
+                                  # Plot ----------------------------------------------
+                                  fluidRow(
+                                      tabBox(title = "Infrastructre Charger Status Across California",
+                                             width = 12,
+                                             tabPanel("A1", plotlyOutput("plot_charger")),
+                                             tabPanel("A2", plotlyOutput("plot_char")))
+                                  )
+                          ),
+                          
+                          # Data Table Page ----------------------------------------------
+                          tabItem("tableevc",
+                                  fluidPage(
+                                      box(title = "Selected Character Stats", DT::dataTableOutput("table_evc"), width = 12))
+                          ),
+                          tabItem("newvehicle",
+
+
+                                  # Input and Value Boxes ----------------------------------------------
+                                  
+
+
+                                  # Plot ----------------------------------------------
+                                  fluidRow(
+                                      tabBox(title = "Plot",
+                                             width = 12,
+                                             tabPanel("A1", plotlyOutput("plot_fuel")),
+                                             tabPanel("A2", plotlyOutput("plot_facet")))
+                                  )
+                          ),
+                          tabItem("sale",
+
+
+
+                                  # Input and Value Boxes ----------------------------------------------
+                                  # fluidRow(
+                                  #     infoBoxOutput("Avg"),
+                                  #     valueBoxOutput("maxcity")
+                                  # ),
+
+
+                                  # Plot ----------------------------------------------
+                                  fluidRow(
+                                      tabBox(title = "Plot",
+                                             width = 12,
+                                             tabPanel("sales", plotlyOutput("sales_county")),
+                                             #tabPanel("A2", plotlyOutput("plot_char"))),
+                                      tabPanel("Bar Chart", plotlyOutput("pie")))
+                                  )
+                           )
+                          
+                      )
+)
+
+ui <- dashboardPage( header, sidebar, body)
+
+# Define server function required to create plots and value boxes -----
+server <- function(input, output) {
+    
+    # Reactive data function -------------------------------------------
+    evInput <- reactive({
+        ev1 <- select(ev, c("City",input$chargeLevel))
+        # Return dataframe ----------------------------------------------
+        return(ev1)
+    })
+    
+    salesInput <- reactive({
+        ev1 <- filter(county_wise_sales, County == input$county)
+        # Return dataframe ----------------------------------------------
+        return(ev1)
+    })
+    
+    fuelInput <- reactive({
+        ev1 <- filter(fuel, Fuel.Type == input$fuel)
+        # Return dataframe ----------------------------------------------
+        return(ev1)
+    })
+    
+    
+    # A plot showing the mass of characters -----------------------------
+    output$plot_charger <- renderPlotly({
+        dat <- evInput()
+        
+        # Generate Plot ----------------------------------------------
+        ggplot(data = dat[1:input$topSelect[1],], aes_string(x = "City", y = input$chargeLevel))+
+            geom_line(aes(group =1), color = "blue")+
+            theme_bw()+
+            theme(axis.text.x = element_text(angle = 60, hjust =1, vjust =1))+
+            xlab("City in CA") + ylab("Numbers of charging stations")
+    })
+    
+    output$sales_county <- renderPlotly({
+    dat <- salesInput()
+    
+    # Generate Plot ----------------------------------------------
+    ggplot(data = dat, aes_string(x = "Data.Year", y = "total_sales"))+
+        geom_line(aes(group =1), color = "blue")+
+        theme_bw()+
+        theme(axis.text.x = element_text(angle = 60, hjust =1, vjust =1))+
+        xlab("City in CA") + ylab("Numbers of charging stations")
+})
+    output$pie <- renderPlotly({
+        type.sales <- ev.sales %>% group_by(Fuel.Type) %>% summarise( total_sales = sum(Number.of.Vehicles, na.rm = TRUE))
+        ggplot(type.sales, aes(x="Fuel.Type", y=total_sales, fill=Fuel.Type)) +
+            geom_bar(stat="identity", position = "dodge", color = "white")
+    })
+    # A plot showing the height of characters -----------------------------------
+    output$plot_char <- renderPlotly({
+        
+        
+        # Generate Plot ----------------------------------------------
+        ggplot(data = ev, aes(x = City))+
+            geom_line(aes(y = total, group =1), color = "blue")+
+            # geom_line(aes(y = Level_two ,  group=1), color = "black")+
+            # geom_line(aes(y = DC_Fast, group =1), color = "green")+
+            # geom_point(aes(y = total, group =1), color = "orange")+
+            theme_bw()+
+            theme(axis.text.x = element_text(angle = 60, hjust =1, vjust =1))+
+            xlab("City in CA") + ylab("Numbers of charging stations")
+    })
+    
+    output$plot_fuel <- renderPlotly({
+        
+        dat <- fuelInput()
+        # Generate Plot ----------------------------------------------
+        ggplot(data = dat, aes(x = Data.Year, color = Fuel.Type))+
+            geom_line(aes(y = vehicles_population, group =1))+
+            theme_bw()+
+            theme(axis.text.x = element_text(angle = 60, hjust =1, vjust =1))+
+            xlab("City in CA") + ylab("Numbers of charging stations")
+    })
+    
+    output$plot_facet <- renderPlotly({
+        
+        dat <- fuel
+        # Generate Plot ----------------------------------------------
+        ggplot(data = dat, aes(x = Data.Year, color = Fuel.Type))+
+            geom_line(aes(y = vehicles_population, group =1))+
+            theme_bw()+
+            #theme(axis.text.x = element_text(angle = 60, hjust =1, vjust =1))+
+            xlab("City in CA") + ylab("Numbers of charging stations")+facet_wrap(.~Fuel.Type, scales ="free")+theme(axis.text.x=element_blank())
+    })
+    
+    # Data table of characters ----------------------------------------------
+    output$table_evc <- DT::renderDataTable({
+        ev
+    })
+   
+    # Mass mean info box ----------------------------------------------
+    output$EVcars <- renderInfoBox({
+        sw <- ev
+        num <- round(sum(ev$total, na.rm = T), 2)
+        
+        infoBox("Chargers", value = num, subtitle = paste(3, "charger type"), icon = icon("battery-half"), color = "purple")
+    })
+    output$Totalcars <- renderInfoBox({
+        #sw <- county_wise_sales
+        num <- sum(county_wise_sales$total_sales , na.rm = T)
+        
+        infoBox("EV vehicles", value = num, subtitle = paste(nrow(county_wise_sales), "County"), icon = icon("car"), color = "purple")
+    })
+    
+    # Height mean value box ----------------------------------------------
+    output$Totalchargers<- renderValueBox({
+        #sw <- ev
+        num <- sum(fuel$vehicles_population, na.rm = T)
+        
+        valueBox(subtitle = "Total vehicles All", value = num, icon = icon("truck"))
+    })
+}
+
+# Run the application ----------------------------------------------
+shinyApp(ui = ui, server = server)

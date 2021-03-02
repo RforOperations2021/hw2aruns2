@@ -1,0 +1,98 @@
+---
+title: "test"
+author: "Arun Sharma"
+date: "3/1/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("tidyverse")
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+```{r}
+ev.sales <- read.csv("new ZEV sales.csv")
+ev.population <- read.csv("vehicle_population.csv")
+ev.chargers <- read.csv("ev_chargers.csv")
+# ev.chargers <- ev.chargers[ev.chargers$State == "CA",]
+```
+
+```{r}
+ev.chargers <- ev.chargers[ev.chargers$State == "CA" & ev.chargers$Fuel.Type.Code == "ELEC"
+                           ,c("Fuel.Type.Code","City","EV.Level1.EVSE.Num",
+                              "EV.Level2.EVSE.Num","EV.DC.Fast.Count"  )]
+# ev.chargers1 <- ev.chargers[ev.chargers$Fuel.Type.Code == "ELEC",]
+unique(ev.chargers$Fuel.Type.Code)
+
+ev <- ev.chargers1 %>% group_by(City)%>% 
+  summarise(count =n(),
+            Level_one = sum(EV.Level1.EVSE.Num, na.rm=TRUE),
+            Level_two = sum(EV.Level2.EVSE.Num, na.rm = TRUE),
+            DC_Fast = sum(EV.DC.Fast.Count, na.rm =TRUE)) %>% 
+  mutate(total = Level_one +Level_two +DC_Fast)
+#reorder as per total
+
+ev <- ev[order(-ev$total),]
+ggplot(data = ev[1:20,], aes(x = reorder(City, -total)))+
+  geom_line(aes(y = Level_one, group =1), color = "blue")+
+  geom_line(aes(y = Level_two ,  group=1), color = "black")+
+  geom_line(aes(y = DC_Fast, group =1), color = "green")+
+  geom_point(aes(y = total, group =1), color = "orange")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 60, hjust =1, vjust =1))+
+  xlab("City in CA") + ylab("Numbers of charging stations") 
+
+unique(ev$City)
+
+ev[1:3,]
+```
+
+
+```{r}
+ev.sales
+
+#graph showing maximum sales by county
+unique(ev.sales$County)
+county_wise_sales <- ev.sales %>% group_by(Data.Year, County) %>% summarise( total_sales = sum(Number.of.Vehicles, na.rm = TRUE))
+
+ggplot(county_wise_sales[county_wise_sales$County == "Los Angeles",], aes(x = Data.Year, y = total_sales))+
+  geom_line()
+  
+
+#graph showing trend for total vehicles across state
+total_sales <- county_wise_sales %>% group_by(Data.Year) %>%  summarise(total = sum(total_sales))
+
+ggplot(total_sales, aes(x = Data.Year, y = total))+
+  geom_line()
+
+#graph showing trend for total vehicles across county
+
+#Market size by Make latest
+unique(ev.sales$Fuel.Type)
+type.sales <- ev.sales %>% group_by(Fuel.Type) %>% summarise( total_sales = sum(Number.of.Vehicles, na.rm = TRUE))
+ggplot(type.sales, aes(x="", y=total_sales, fill=Fuel.Type)) +
+  geom_bar(stat="identity", width=1, color = "white") +
+  coord_polar("y", start=0)+theme_void()
+
+```
+
+```{r}
+ev.population$Data.Year <- as.factor(ev.population$Data.Year)
+
+#trend for different fuel type
+fuel <- ev.population %>% group_by(Data.Year, Fuel.Type) %>% summarise(vehicles_population =  sum(Number.of.Vehicles,na.rm =TRUE))
+
+ggplot(data = fuel, aes(x = Data.Year, color = Fuel.Type))+
+  geom_line(aes(y = vehicles_population, group =1))+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 60, hjust =1, vjust =1))+
+  xlab("City in CA") + ylab("Numbers of charging stations") + facet_wrap(.~Fuel.Type, scales = "free")
+
+funique(fuel$Fuel.Type)
+```
+
