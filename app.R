@@ -90,23 +90,41 @@ sidebar <- dashboardSidebar(
                     multiple = FALSE,
                     #selectize = TRUE,
                     selected = "Los Angeles"),
-        br(),
+        
         menuItem("Electric Vehicle Sales", icon = icon("car"), tabName = "newvehicle"),
         
+        
+       
+        
+        
+        
         menuItem("Electric Vehicle Chargers", icon = icon("battery-half"), tabName = "EVchargers"),
-        menuItem("TableEVC", icon = icon("table"), tabName = "tableevc"), #badgeLabel = "new", badgeColor = "green"),
         
-        
-        br(),
-        br(),
-        br(),
+        sliderInput("topSelect",
+                    "How many top cities-number of chargers?",
+                    min = 5,
+                    max = 25,
+                    value = 5,
+                    step = 1), 
         # Inputs: select variables to plot ----------------------------------------------
         selectInput("chargeLevel",
-                    "Charger Level:",
+                    "Charger Level Trend:",
                     choices = c("Level_one", "Level_two", "DC_Fast", "total"),
                     multiple = FALSE,
                     #selectize = TRUE,
                     selected = "total"),
+        
+        menuItem("TableEVC", icon = icon("table"), tabName = "tableevc"), #badgeLabel = "new", badgeColor = "green"),
+        
+        numericInput(inputId = "n_samp", 
+                     label = "Sample size:", 
+                     min = 1, max = nrow(movies), 
+                     value = 50),
+        # Write sampled data as csv ------------------------------------------
+        actionButton(inputId = "write_csv", 
+                     label = "Write CSV"),
+       
+        
         #INputs: county selected
         
         
@@ -117,14 +135,9 @@ sidebar <- dashboardSidebar(
                     choices = fuel_type,
         multiple = FALSE,
         #selectize = TRUE,
-        selected = "Diesel"),
+        selected = "Diesel")
         # top x Selection ----------------------------------------------
-        sliderInput("topSelect",
-                    "Select Top:",
-                    min = 5,
-                    max = 25,
-                    value = 5,
-                    step = 1)
+        
     )
 )
 
@@ -154,7 +167,7 @@ body <- dashboardBody(shinyDashboardThemes(theme = "blue_gradient"),
                                              tabPanel("A2", plotlyOutput("plot_char")))
                                   )
                           ),
-                          
+                          uiOutput(outputId = "n"),
                           # Data Table Page ----------------------------------------------
                           tabItem("tableevc",
                                   fluidPage(
@@ -203,6 +216,20 @@ ui <- dashboardPage( header, sidebar, body)
 
 # Define server function required to create plots and value boxes -----
 server <- function(input, output) {
+    # Update the maximum allowed n_samp for selected type movies ------
+    observe({
+        updateNumericInput(session, 
+                           inputId = "n_samp",
+                           value = min(50, nrow(ev)),
+                           max = nrow(ev)
+        )
+    })
+    
+    # Create new df that is n_samp obs from selected type movies ------
+    movies_sample <- reactive({ 
+        req(input$n_samp) # ensure availablity of value before proceeding
+        sample_n(movies_subset(), input$n_samp)
+    })
     
     # Reactive data function -------------------------------------------
     evInput <- reactive({
@@ -290,7 +317,7 @@ server <- function(input, output) {
     
     # Data table of characters ----------------------------------------------
     output$table_evc <- DT::renderDataTable({
-        ev
+        ev[1:input$n_samp]
     })
    
     # Mass mean info box ----------------------------------------------
