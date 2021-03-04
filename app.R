@@ -80,64 +80,55 @@ sidebar <- dashboardSidebar(
     
     sidebarMenu(
         id = "tabs",
-        
         # Menu Items ----------------------------------------------
-        menuItem("Total Vehicle population", icon = icon("truck"), tabName = "sale"),
-        br(),
+        menuItem("Electric vehicle Sale", icon = icon("car"), tabName = "sale"),
+        
+        menuItem("Total Vehicle Population", icon = icon("truck"), tabName = "newvehicle"),
+        
+        menuItem("Electric Vehicle Chargers", icon = icon("battery-half"), tabName = "EVchargers"),
+        
+        menuItem("DATA TableEVC", icon = icon("table"), tabName = "tableevc"), #badgeLabel = "new", badgeColor = "green"),
+        
+        br(), # break for better visibility
+        
+        #INputs: county selected
         selectInput("county",
-                    "Select County:",
+                    "Select County For Total Vehicle Population:",
                     choices = counties,
                     multiple = FALSE,
                     #selectize = TRUE,
                     selected = "Los Angeles"),
         
-        menuItem("Electric Vehicle Sales", icon = icon("car"), tabName = "newvehicle"),
+        #input: Fuel type wise vehicles sold
+        selectInput("fuel",
+                    "Select Fuel Type for sold electric vehicles:",
+                    choices = fuel_type,
+                    multiple = FALSE,
+                    #selectize = TRUE,
+                    selected = "Diesel"),
         
-        
-       
-        
-        
-        
-        menuItem("Electric Vehicle Chargers", icon = icon("battery-half"), tabName = "EVchargers"),
-        
+        # top x Selection ----------------------------------------------
         sliderInput("topSelect",
                     "How many top cities-number of chargers?",
                     min = 5,
                     max = 25,
                     value = 5,
                     step = 1), 
-        # Inputs: select variables to plot ----------------------------------------------
+        
+        # Inputs: select level of chargers to plot ----------------------------------------------
         selectInput("chargeLevel",
                     "Charger Level Trend:",
                     choices = c("Level_one", "Level_two", "DC_Fast", "total"),
                     multiple = FALSE,
                     #selectize = TRUE,
                     selected = "total"),
-        
-        menuItem("TableEVC", icon = icon("table"), tabName = "tableevc"), #badgeLabel = "new", badgeColor = "green"),
-        
-        numericInput(inputId = "n_samp", 
-                     label = "Sample size:", 
-                     min = 1, max = nrow(movies), 
-                     value = 50),
+        br(),
+        br(),
+        br(),
         # Write sampled data as csv ------------------------------------------
         actionButton(inputId = "write_csv", 
-                     label = "Write CSV"),
+                     label = "Write CSV")
        
-        
-        #INputs: county selected
-        
-        
-    
-    #input: Fuel type
-        selectInput("fuel",
-                    "Select Fuel Type:",
-                    choices = fuel_type,
-        multiple = FALSE,
-        #selectize = TRUE,
-        selected = "Diesel")
-        # top x Selection ----------------------------------------------
-        
     )
 )
 
@@ -156,56 +147,38 @@ body <- dashboardBody(shinyDashboardThemes(theme = "blue_gradient"),
                           
                           # Plot page ----------------------------------------------
                           tabItem("EVchargers",
-                                  
-                                 
-                                  
                                   # Plot ----------------------------------------------
                                   fluidRow(
-                                      tabBox(title = "Infrastructre Charger Status Across California",
+                                      tabBox(title = "Electric Vehicle Charger: Status across CA",
                                              width = 12,
-                                             tabPanel("A1", plotlyOutput("plot_charger")),
-                                             tabPanel("A2", plotlyOutput("plot_char")))
+                                             tabPanel("Chargers for top cities", plotlyOutput("plot_charger")),
+                                             tabPanel("Inequity within charger distribution", plotlyOutput("plot_char")))
                                   )
                           ),
                           uiOutput(outputId = "n"),
                           # Data Table Page ----------------------------------------------
                           tabItem("tableevc",
                                   fluidPage(
-                                      box(title = "Selected Character Stats", DT::dataTableOutput("table_evc"), width = 12))
+                                      box(title = "List of level-wise Chargers", DT::dataTableOutput("table_evc"), width = 12))
                           ),
                           tabItem("newvehicle",
-
-
-                                  # Input and Value Boxes ----------------------------------------------
-                                  
-
-
                                   # Plot ----------------------------------------------
                                   fluidRow(
-                                      tabBox(title = "Plot",
+                                      tabBox(title = "Fueltype wise Total Vehicle Population",
                                              width = 12,
-                                             tabPanel("A1", plotlyOutput("plot_fuel")),
-                                             tabPanel("A2", plotlyOutput("plot_facet")))
+                                             tabPanel("Yearly trend for vehicles", plotlyOutput("plot_fuel")),
+                                             tabPanel("Fuel wise trend", plotlyOutput("plot_facet")))
                                   )
                           ),
+                          
                           tabItem("sale",
-
-
-
-                                  # Input and Value Boxes ----------------------------------------------
-                                  # fluidRow(
-                                  #     infoBoxOutput("Avg"),
-                                  #     valueBoxOutput("maxcity")
-                                  # ),
-
-
                                   # Plot ----------------------------------------------
                                   fluidRow(
-                                      tabBox(title = "Plot",
+                                      tabBox(title = "Total Electric Vehicle Sales",
                                              width = 12,
-                                             tabPanel("sales", plotlyOutput("sales_county")),
+                                             tabPanel("Sales trend for a County", plotlyOutput("sales_county")),
                                              #tabPanel("A2", plotlyOutput("plot_char"))),
-                                      tabPanel("Bar Chart", plotlyOutput("pie")))
+                                      tabPanel("Fuel Type wise distribution", plotlyOutput("pie")))
                                   )
                            )
                           
@@ -216,20 +189,7 @@ ui <- dashboardPage( header, sidebar, body)
 
 # Define server function required to create plots and value boxes -----
 server <- function(input, output) {
-    # Update the maximum allowed n_samp for selected type movies ------
-    observe({
-        updateNumericInput(session, 
-                           inputId = "n_samp",
-                           value = min(50, nrow(ev)),
-                           max = nrow(ev)
-        )
-    })
     
-    # Create new df that is n_samp obs from selected type movies ------
-    movies_sample <- reactive({ 
-        req(input$n_samp) # ensure availablity of value before proceeding
-        sample_n(movies_subset(), input$n_samp)
-    })
     
     # Reactive data function -------------------------------------------
     evInput <- reactive({
@@ -271,17 +231,16 @@ server <- function(input, output) {
         geom_line(aes(group =1), color = "blue")+
         theme_bw()+
         theme(axis.text.x = element_text(angle = 60, hjust =1, vjust =1))+
-        xlab("City in CA") + ylab("Numbers of charging stations")
+        xlab("Year") + ylab("Numbers of Electric Vehicles")+ ggtitle(paste("Year wise sales for", input$county))
 })
     output$pie <- renderPlotly({
         type.sales <- ev.sales %>% group_by(Fuel.Type) %>% summarise( total_sales = sum(Number.of.Vehicles, na.rm = TRUE))
         ggplot(type.sales, aes(x="Fuel.Type", y=total_sales, fill=Fuel.Type)) +
-            geom_bar(stat="identity", position = "dodge", color = "white")
+            geom_bar(stat="identity", position = "dodge", color = "white") + ggtitle("Vehicle sales by Fuel type")
     })
+    
     # A plot showing the height of characters -----------------------------------
     output$plot_char <- renderPlotly({
-        
-        
         # Generate Plot ----------------------------------------------
         ggplot(data = ev, aes(x = City))+
             geom_line(aes(y = total, group =1), color = "blue")+
@@ -290,7 +249,8 @@ server <- function(input, output) {
             # geom_point(aes(y = total, group =1), color = "orange")+
             theme_bw()+
             theme(axis.text.x = element_text(angle = 60, hjust =1, vjust =1))+
-            xlab("City in CA") + ylab("Numbers of charging stations")
+            xlab("City in CA") + ylab("Numbers of charging stations")+theme(axis.text.x=element_blank())+
+            ggtitle("Plot showing uneven distribution across CA")
     })
     
     output$plot_fuel <- renderPlotly({
@@ -301,7 +261,7 @@ server <- function(input, output) {
             geom_line(aes(y = vehicles_population, group =1))+
             theme_bw()+
             theme(axis.text.x = element_text(angle = 60, hjust =1, vjust =1))+
-            xlab("City in CA") + ylab("Numbers of charging stations")
+            xlab("Year") + ylab(paste("Number of vehicles:", input$fuel)) + ggtitle(paste("Sales trend for", input$fuel))
     })
     
     output$plot_facet <- renderPlotly({
@@ -317,30 +277,38 @@ server <- function(input, output) {
     
     # Data table of characters ----------------------------------------------
     output$table_evc <- DT::renderDataTable({
-        ev[1:input$n_samp]
+        ev
     })
    
     # Mass mean info box ----------------------------------------------
     output$EVcars <- renderInfoBox({
-        sw <- ev
-        num <- round(sum(ev$total, na.rm = T), 2)
+        sw <- evInput()
+        num <- round(sum(sw[,input$chargeLevel], na.rm = T), 2)
         
-        infoBox("Chargers", value = num, subtitle = paste(3, "charger type"), icon = icon("battery-half"), color = "purple")
+        infoBox("Chargers", value = num, subtitle = paste("Charger Type:", input$chargeLevel), icon = icon("battery-half"), color = "purple")
     })
     output$Totalcars <- renderInfoBox({
-        #sw <- county_wise_sales
-        num <- sum(county_wise_sales$total_sales , na.rm = T)
+        sw <- salesInput()
+        num <- sum(sw$total_sales , na.rm = T)
         
-        infoBox("EV vehicles", value = num, subtitle = paste(nrow(county_wise_sales), "County"), icon = icon("car"), color = "purple")
+        infoBox("EV vehicles", value = num, subtitle = paste("County:", input$county), icon = icon("car"), color = "purple")
     })
     
     # Height mean value box ----------------------------------------------
     output$Totalchargers<- renderValueBox({
-        #sw <- ev
-        num <- sum(fuel$vehicles_population, na.rm = T)
+        sw <- fuelInput()
+        num <- sum(sw$vehicles_population, na.rm = T)
         
-        valueBox(subtitle = "Total vehicles All", value = num, icon = icon("truck"))
+        valueBox(subtitle = paste("Vehicles by Fuel Type in CA:", input$fuel), value = num, icon = icon("truck"))
     })
+    
+    # Write sampled data as csv ---------------------------------------
+    observeEvent(eventExpr = input$write_csv, 
+                 handlerExpr = {
+                     filename <- paste0("Chargercountries", str_replace_all(Sys.time(), ":|\ ", "_"), ".csv")
+                     write.csv(movies_sample(), file = filename, row.names = FALSE) 
+                 }
+    )
 }
 
 # Run the application ----------------------------------------------
